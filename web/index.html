@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <!-- black-translucent draws the clock, battery and signal in white over the
+       page, and this app's light theme has a white bar behind them - on the
+       phone the status bar read as empty (confirmed on the device 2026-09-13).
+       default lets iOS draw its own bar above the web view. The inset it hands
+       back is then 0, which --safe-top-bar floors so the first control still
+       has somewhere to sit. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <!-- The name under the icon on the home screen. Left empty, iOS falls back
+       to the document title, which this page fills in from script - so the
+       first thing a new install showed was whatever it could scrape. -->
+  <!-- This file is ASCII: two tests read it that way, so the name is written
+       as character references. It renders as the Japanese word. -->
+  <meta name="apple-mobile-web-app-title" content="&#12509;&#12465;&#12483;&#12488;">
+  <meta name="theme-color" content="#E4E9EF">
+  <script>
+    (() => {
+      let theme = "system";
+      try {
+        const stored = window.localStorage.getItem("pocket-theme");
+        if (stored === "light" || stored === "dark" || stored === "system") {
+          theme = stored;
+        }
+      } catch (error) {
+        theme = "system";
+      }
+      if (theme === "light" || theme === "dark") {
+        document.documentElement.setAttribute("data-theme", theme);
+      }
+      const dark = theme === "dark" ||
+        (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.querySelector('meta[name="theme-color"]').content = dark ? "#10141B" : "#E4E9EF";
+    })();
+  </script>
+  <!-- A talk link shared into Slack opens here over https, and the native app
+       cannot claim it: a universal link needs the associated-domains
+       capability, which a personal Apple team is refused (xcodebuild said so
+       on 2026-09-15). So the page hands the route over to the app's own
+       scheme. An installed copy of this web app keeps its own routes, and so
+       does every desktop browser. -->
+  <script>
+    window.pocketNativeHandoff = {
+      // The app URL a shared web link belongs to, or null to stay in the browser.
+      target(hash, userAgent, installed) {
+        if (installed || !/iPhone|iPad|iPod/.test(userAgent || "")) return null;
+        const route = /^#\/talk\/([A-Za-z0-9_-]+)$/.exec(hash || "");
+        return route ? "pocketios://talk/" + route[1] : null;
+      },
+    };
+    (() => {
+      const installed = window.navigator.standalone === true ||
+        (typeof window.matchMedia === "function" &&
+          window.matchMedia("(display-mode: standalone)").matches);
+      const target = window.pocketNativeHandoff.target(
+        window.location.hash, window.navigator.userAgent, installed);
+      if (!target) return;
+      const session = (key, value) => {
+        try {
+          if (value === undefined) return window.sessionStorage.getItem(key);
+          window.sessionStorage.setItem(key, value);
+        } catch (error) { /* a private window hands back nothing */ }
+        return null;
+      };
+      // Slack's web view drops the scheme change the page makes by itself
+      // (measured on the phone, 2026-09-15), so the offer is the way through
+      // there: a tap is a gesture, and a gesture is allowed. It is built
+      // before the hand-off, because changing scheme while
+      // the document is still being parsed leaves it without a body (Chrome
+      // 140, measured 2026-09-15), and revealed a moment later so it never
+      // flashes over a hand-off that worked.
+      const offer = () => {
+        if (session("pocket-handoff-bar") === "off") return;
+        const style = document.createElement("style");
+        style.textContent = "#native-handoff{position:fixed;z-index:9000;left:12px;right:12px;" +
+          "bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;" +
+          "padding:8px;border-radius:14px;background:#191D24;color:#fff;" +
+          "box-shadow:0 6px 24px rgba(0,0,0,.28)}" +
+          "#native-handoff[hidden]{display:none}" +
+          "#native-handoff button{font:600 15px/1.4 -apple-system,system-ui,sans-serif;" +
+          "color:inherit;background:none;border:0;padding:8px 10px;border-radius:10px}" +
+          "#native-handoff button:first-child{flex:1;text-align:left}";
+        const bar = document.createElement("div");
+        bar.id = "native-handoff";
+        bar.hidden = true;
+        const open = document.createElement("button");
+        open.type = "button";
+        open.textContent = "\u300c\u30dd\u30b1\u30c3\u30c8\u300d\u3067\u958b\u304f";
+        open.addEventListener("click", () => { window.location.href = target; });
+        const close = document.createElement("button");
+        close.type = "button";
+        close.setAttribute("aria-label", "\u9589\u3058\u308b");
+        close.textContent = "\u00d7";
+        close.addEventListener("click", () => {
+          session("pocket-handoff-bar", "off");
+          bar.remove();
+          style.remove();
+        });
+        bar.append(open, close);
+        document.head.append(style);
+        document.body.append(bar);
+        window.setTimeout(() => { bar.hidden = false; }, 500);
+      };
+      const start = () => {
+        offer();
+        // One automatic hand-off per talk per tab: coming back to the browser
+        // on purpose must not throw the reader straight out again.
+        if (session("pocket-handoff-" + target) === "1") return;
+        session("pocket-handoff-" + target, "1");
+        window.location.href = target;
+      };
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", start);
+      } else start();
+    })();
+  </script>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <!-- Without this the browser guesses /favicon.ico at the origin root,
+       outside this app's scope, and 404s on every load. -->
+  <link rel="icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+  <title></title>
+</head>
+<body>
+  <main id="app"></main>
+  <script src="strings.ja.js"></script>
+  <script src="pad.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
